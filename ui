@@ -599,40 +599,6 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
     })
     _0xd5fe._0x36b7("UIListLayout", {Parent = _0xd5fe._0xd4c2, Padding = UDim.new(0, 5), VerticalAlignment = Enum.VerticalAlignment.Bottom})
 
-    -- Custom Cursor
-    local CustomCursor = _0xd5fe._0x36b7("ImageLabel", {
-        Parent = ScreenGui,
-        Name = "CustomCursor",
-        BackgroundTransparency = 1,
-        Size = UDim2.new(0, 20, 0, 20),
-        Image = "rbxassetid://102366537072878",
-        ImageColor3 = _0xd5fe._0x0e5f.Theme.Text,
-        ZIndex = 9999,
-        Visible = true
-    })
-    
-    local CursorShadow = _0xd5fe._0x36b7("ImageLabel", {
-        Parent = CustomCursor,
-        BackgroundTransparency = 1,
-        Position = UDim2.new(0, 2, 0, 2),
-        Size = UDim2.new(1, 0, 1, 0),
-        Image = "rbxassetid://102366537072878",
-        ImageColor3 = Color3.new(0, 0, 0),
-        ImageTransparency = 0.7,
-        ZIndex = 9998
-    })
-    
-    local CursorDot = _0xd5fe._0x36b7("Frame", {
-        Parent = ScreenGui,
-        Name = "CursorDot",
-        BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor,
-        Size = UDim2.new(0, 6, 0, 6),
-        ZIndex = 9999,
-        Visible = true,
-        BorderSizePixel = 0
-    })
-    _0xd5fe._0x36b7("UICorner", {Parent = CursorDot, CornerRadius = UDim.new(1, 0)})
-    
     -- Tooltip Frame (follows mouse on hover)
     local Tooltip = _0xd5fe._0x36b7("Frame", {
         Parent = ScreenGui,
@@ -687,31 +653,15 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
     _0xd5fe._0x0e5f.TooltipText = TooltipText
     _0xd5fe._0x0e5f.TooltipStroke = TooltipStroke
     
-    _0xd5fe._0x8efd.MouseIconEnabled = false
-    
-    local cursorConn = game:GetService("RunService").RenderStepped:Connect(function()
-        -- Only update cursor when UI is visible to save FPS
-        if not _0xd5fe._0x0e5f.Open then
-            CustomCursor.Visible = false
-            CursorDot.Visible = false
-            return
-        end
-        
-        CustomCursor.Visible = true
-        CursorDot.Visible = true
-        local mousePos = _0xd5fe._0x8efd:GetMouseLocation()
-        CustomCursor.Position = UDim2.new(0, mousePos.X, 0, mousePos.Y)
-        CursorDot.Position = UDim2.new(0, mousePos.X - 3, 0, mousePos.Y - 3)
-        -- Update tooltip position to follow mouse
+    -- Tooltip position update loop
+    local tooltipConn = game:GetService("RunService").RenderStepped:Connect(function()
         if Tooltip.Visible then
+            local mousePos = _0xd5fe._0x8efd:GetMouseLocation()
             Tooltip.Position = UDim2.new(0, mousePos.X + 15, 0, mousePos.Y + 15)
         end
     end)
     
-    -- Store cursor connection for cleanup
-    _0xd5fe._0x0e5f.CursorConnection = cursorConn
-    _0xd5fe._0x0e5f.CustomCursor = CustomCursor
-    _0xd5fe._0x0e5f.CursorDot = CursorDot
+    _0xd5fe._0x0e5f.TooltipConnection = tooltipConn
 
     -- Main Window (hidden until loading completes)
     local Main = _0xd5fe._0x36b7("Frame", {
@@ -941,10 +891,7 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
     _0xd5fe._0x8efd.InputBegan:Connect(function(input)
         if input.KeyCode == _0xd5fe._0x0e5f.ToggleKey then 
             _0xd5fe._0x0e5f.Open = not _0xd5fe._0x0e5f.Open 
-            Main.Visible = _0xd5fe._0x0e5f.Open 
-            CustomCursor.Visible = _0xd5fe._0x0e5f.Open
-            CursorDot.Visible = _0xd5fe._0x0e5f.Open
-            _0xd5fe._0x8efd.MouseIconEnabled = not _0xd5fe._0x0e5f.Open
+            Main.Visible = _0xd5fe._0x0e5f.Open
         end
     end)
 
