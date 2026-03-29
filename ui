@@ -2165,6 +2165,9 @@ function _0xd5fe._0x0e5f.SaveManager:Load(name)
     
     local loadedCount = 0
     
+    -- Set loading flag so toggle callbacks can skip side-effects (e.g. safespot teleport)
+    _0xd5fe._0x0e5f._isLoadingConfig = true
+    
     -- Load order: MultiDropdowns and Dropdowns first, then other settings, Toggles last
     -- This ensures data is populated before toggles fire their callbacks
     local toggles = {}
@@ -2224,6 +2227,9 @@ function _0xd5fe._0x0e5f.SaveManager:Load(name)
     for _, option in ipairs(toggles) do
         loadOption(option)
     end
+    
+    -- Clear loading flag after all options are loaded
+    _0xd5fe._0x0e5f._isLoadingConfig = false
     
     return true, loadedCount
 end
