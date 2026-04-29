@@ -1116,6 +1116,7 @@ function _0xd5fe._0x0e5f:CreateWindow(Settings)
             _0xd5fe._0x36b7("UIPadding", {Parent = Box, PaddingBottom = UDim.new(0, 12)})
 
             local Group = {}
+            Group._container = Container
             
             function Group:AddToggle(Text, Default, Callback, TooltipOptions)
                 local Frame = _0xd5fe._0x36b7("TextButton", {Parent = Container, BackgroundTransparency = 1, Size = UDim2.new(1,0,0,22), Text = "", AutoButtonColor = false})
@@ -2370,6 +2371,416 @@ function _0xd5fe._0x0e5f.SaveManager:BuildConfigSection(tab)
     end)
     
     self:SetIgnoreIndexes({"SaveManager_ConfigName", "SaveManager_ConfigList"})
+end
+
+function _0xd5fe._0x0e5f.SaveManager:BuildCommunityConfigSection(tab, apiUrl)
+    local CommunityGroup = tab:AddLeftGroupbox("Community Configs")
+    
+    local selectedCommunityConfig = nil
+    local communityConfigs = {}
+    local configEntryFrames = {}
+    
+    -- HTTP request helper (executor compatibility)
+    -- Google Apps Script returns 302 redirects; game:HttpGet follows them automatically
+    local function httpGet(url)
+        local success, result = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if not success then return nil, tostring(result) end
+        return {Body = result}
+    end
+    
+    local function httpPost(url, body)
+        local requestFn = (type(request) == "function" and request) 
+            or (type(http_request) == "function" and http_request)
+            or (type(http) == "table" and http.request)
+            or (type(syn) == "table" and syn.request)
+            or (type(fluxus) == "table" and fluxus.request)
+        if not requestFn then return nil, "No HTTP function available" end
+        local success, result = pcall(requestFn, {
+            Url = url,
+            Method = "POST",
+            Headers = {["Content-Type"] = "application/json"},
+            Body = body
+        })
+        if not success then return nil, tostring(result) end
+        -- Handle redirects: if status is 302/301, follow the Location header
+        if result and result.StatusCode and (result.StatusCode == 302 or result.StatusCode == 301) then
+            local location = result.Headers and (result.Headers["Location"] or result.Headers["location"])
+            if location then
+                return httpGet(location)
+            end
+        end
+        return result
+    end
+    
+    -- Get a unique identifier for like tracking
+    local function getHWID()
+        local hwid = "unknown"
+        pcall(function()
+            if type(gethwid) == "function" then
+                hwid = gethwid()
+            elseif type(getguid) == "function" then
+                hwid = getguid()
+            else
+                hwid = game:GetService("Players").LocalPlayer.UserId .. "_" .. game:GetService("Players").LocalPlayer.Name
+            end
+        end)
+        return hwid
+    end
+    
+    -- Status label
+    local statusLabel = CommunityGroup:AddLabel("Status: Not loaded")
+    
+    -- Build scrollable config list inside the groupbox container
+    local ScrollHolder = _0xd5fe._0x36b7("Frame", {
+        Parent = CommunityGroup._container,
+        BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Element,
+        Size = UDim2.new(1, 0, 0, 180),
+        BorderSizePixel = 0,
+        ClipsDescendants = true
+    })
+    _0xd5fe._0x36b7("UICorner", {Parent = ScrollHolder, CornerRadius = UDim.new(0, 6)})
+    _0xd5fe._0x36b7("UIStroke", {Parent = ScrollHolder, Color = _0xd5fe._0x0e5f.Theme.Outline, Thickness = 1})
+    
+    local ScrollList = _0xd5fe._0x36b7("ScrollingFrame", {
+        Parent = ScrollHolder,
+        BackgroundTransparency = 1,
+        Size = UDim2.new(1, 0, 1, 0),
+        BorderSizePixel = 0,
+        ScrollBarThickness = 3,
+        ScrollBarImageColor3 = _0xd5fe._0x0e5f.AccentColor,
+        CanvasSize = UDim2.new(0, 0, 0, 0),
+        AutomaticCanvasSize = Enum.AutomaticSize.Y
+    })
+    _0xd5fe._0x36b7("UIListLayout", {Parent = ScrollList, SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2)})
+    _0xd5fe._0x36b7("UIPadding", {Parent = ScrollList, PaddingLeft = UDim.new(0, 4), PaddingRight = UDim.new(0, 4), PaddingTop = UDim.new(0, 4), PaddingBottom = UDim.new(0, 4)})
+    
+    local configEntryStates = {}
+    
+    local function clearList()
+        for _, frame in pairs(configEntryFrames) do
+            pcall(function() frame:Destroy() end)
+        end
+        configEntryFrames = {}
+        configEntryStates = {}
+        selectedCommunityConfig = nil
+    end
+    
+    local function createConfigEntry(config, index)
+        local isSelected = false
+        
+        -- Parse ISO timestamp to a clean date string (e.g. "04/18/2026")
+        local dateStr = ""
+        if config.timestamp and config.timestamp ~= "" then
+            local y, m, d = string.match(tostring(config.timestamp), "(%d+)-(%d+)-(%d+)")
+            if y and m and d then
+                dateStr = m .. "/" .. d .. "/" .. y
+            end
+        end
+        
+        local Entry = _0xd5fe._0x36b7("TextButton", {
+            Parent = ScrollList,
+            BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section,
+            Size = UDim2.new(1, -4, 0, 40),
+            Text = "",
+            AutoButtonColor = false,
+            BorderSizePixel = 0,
+            LayoutOrder = index
+        })
+        _0xd5fe._0x36b7("UICorner", {Parent = Entry, CornerRadius = UDim.new(0, 5)})
+        
+        local NameLabel = _0xd5fe._0x36b7("TextLabel", {
+            Parent = Entry,
+            Text = config.name,
+            Font = _0xd5fe._0x0e5f.FontBold,
+            TextColor3 = _0xd5fe._0x0e5f.Theme.Text,
+            Size = UDim2.new(1, -80, 0, 20),
+            Position = UDim2.new(0, 8, 0, 2),
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextSize = 12,
+            TextTruncate = Enum.TextTruncate.AtEnd,
+            Active = false
+        })
+        
+        local DateLabel = _0xd5fe._0x36b7("TextLabel", {
+            Parent = Entry,
+            Text = dateStr,
+            Font = _0xd5fe._0x0e5f.Font,
+            TextColor3 = _0xd5fe._0x0e5f.Theme.TextDim,
+            Size = UDim2.new(0.5, -8, 0, 16),
+            Position = UDim2.new(0, 8, 0, 22),
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Left,
+            TextSize = 10,
+            Active = false
+        })
+        
+        local LikeLabel = _0xd5fe._0x36b7("TextLabel", {
+            Parent = Entry,
+            Text = "Likes: " .. tostring(config.likes or 0),
+            Font = _0xd5fe._0x0e5f.FontBold,
+            TextColor3 = Color3.fromRGB(255, 100, 120),
+            Size = UDim2.new(0, 70, 0, 16),
+            Position = UDim2.new(1, -75, 0, 22),
+            BackgroundTransparency = 1,
+            TextXAlignment = Enum.TextXAlignment.Right,
+            TextSize = 10,
+            Active = false
+        })
+        
+        Entry.MouseEnter:Connect(function()
+            if not isSelected then
+                _0xd5fe._0xa4bd:Create(Entry, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Element}):Play()
+            end
+        end)
+        Entry.MouseLeave:Connect(function()
+            if not isSelected then
+                _0xd5fe._0xa4bd:Create(Entry, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section}):Play()
+            end
+        end)
+        
+        Entry.MouseButton1Click:Connect(function()
+            -- Deselect all others
+            for i, otherFrame in pairs(configEntryFrames) do
+                if configEntryStates[i] then
+                    configEntryStates[i].selected = false
+                end
+                pcall(function()
+                    _0xd5fe._0xa4bd:Create(otherFrame, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.Theme.Section}):Play()
+                end)
+            end
+            -- Select this one
+            isSelected = true
+            selectedCommunityConfig = config
+            _0xd5fe._0xa4bd:Create(Entry, TweenInfo.new(0.15), {BackgroundColor3 = _0xd5fe._0x0e5f.AccentColor}):Play()
+            statusLabel:Set("Selected: " .. config.name)
+        end)
+        
+        table.insert(configEntryFrames, Entry)
+        configEntryStates[#configEntryFrames] = {selected = false, config = config, likeLabel = LikeLabel}
+    end
+    
+    local function refreshList()
+        statusLabel:Set("Status: Loading...")
+        
+        task.spawn(function()
+            local response, err = httpGet(apiUrl .. "?action=list")
+            
+            if not response then
+                statusLabel:Set("ERR: No response")
+                return
+            end
+            
+            if not response.Body then
+                statusLabel:Set("ERR: Empty body")
+                return
+            end
+            
+            local success, data = pcall(function()
+                return _0xd5fe._0x740e:JSONDecode(response.Body)
+            end)
+            
+            if not success then
+                statusLabel:Set("ERR: JSON parse fail")
+                return
+            end
+            
+            if not data or not data.success then
+                statusLabel:Set("ERR: " .. (data and data.error or "Unknown API error"))
+                return
+            end
+            
+            communityConfigs = data.configs or {}
+            clearList()
+            
+            for i, config in ipairs(communityConfigs) do
+                createConfigEntry(config, i)
+            end
+            
+            statusLabel:Set("Status: " .. #communityConfigs .. " configs loaded")
+        end)
+    end
+    
+    -- Dropdown of local configs for upload
+    local selectedUploadConfig = ""
+    local localConfigList = self:RefreshConfigList()
+    local uploadDropdownRef = nil
+    
+    uploadDropdownRef = CommunityGroup:AddDropdown("CC_UploadSelect", localConfigList, nil, function(opt)
+        selectedUploadConfig = opt or ""
+    end)
+    
+    CommunityGroup:AddButton("Save Selected", function()
+        if not selectedCommunityConfig then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a config from the list first", 3, "error")
+        end
+        
+        local configData = selectedCommunityConfig.data
+        if not configData or configData == "" then
+            return _0xd5fe._0x0e5f:Notify("Community", "Config has no data", 3, "error")
+        end
+        
+        -- Save the community config as a local .json file
+        local saveName = selectedCommunityConfig.name
+        local filePath = self.Folder .. "/settings/" .. saveName .. ".json"
+        
+        local ok, writeErr = pcall(function()
+            writefile(filePath, configData)
+        end)
+        
+        if not ok then
+            return _0xd5fe._0x0e5f:Notify("Community", "Failed to save: " .. tostring(writeErr), 3, "error")
+        end
+        
+        _0xd5fe._0x0e5f:Notify("Community", "Saved '" .. saveName .. "' to your configs!", 3, "check")
+        
+        -- Refresh the SaveManager config list and upload dropdown so it appears
+        if _0xd5fe._0x0e5f.Options["SaveManager_ConfigList"] then
+            _0xd5fe._0x0e5f.Options["SaveManager_ConfigList"]:Refresh(self:RefreshConfigList())
+        end
+        if uploadDropdownRef and uploadDropdownRef.Refresh then
+            uploadDropdownRef:Refresh(self:RefreshConfigList())
+        end
+    end)
+    
+    CommunityGroup:AddButton("Upload Selected Config", function()
+        if not selectedUploadConfig or selectedUploadConfig == "" then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a local config first", 3, "error")
+        end
+        
+        -- Read the actual saved config file from disk
+        local filePath = self.Folder .. "/settings/" .. selectedUploadConfig .. ".json"
+        if not isfile(filePath) then
+            return _0xd5fe._0x0e5f:Notify("Community", "Config file not found", 3, "error")
+        end
+        
+        local configJson = readfile(filePath)
+        local author = game:GetService("Players").LocalPlayer.Name
+        
+        _0xd5fe._0x0e5f:Notify("Community", "Uploading...", 2, "info")
+        
+        task.spawn(function()
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
+                    action = "upload",
+                    name = selectedUploadConfig,
+                    author = author,
+                    data = configJson
+                }))
+            
+            if not response or not response.Body then
+                _0xd5fe._0x0e5f:Notify("Community", "Upload failed: " .. (err or "No response"), 3, "error")
+                return
+            end
+            
+            local success, data = pcall(function()
+                return _0xd5fe._0x740e:JSONDecode(response.Body)
+            end)
+            
+            if success and data and data.success then
+                _0xd5fe._0x0e5f:Notify("Community", "Uploaded: " .. selectedUploadConfig, 3, "check")
+                refreshList()
+            else
+                _0xd5fe._0x0e5f:Notify("Community", "Upload failed: " .. (data and data.error or "Unknown error"), 3, "error")
+            end
+        end)
+    end)
+    
+    CommunityGroup:AddButton("Like Selected", function()
+        if not selectedCommunityConfig then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select a config from the list first", 3, "error")
+        end
+        
+        local configToLike = selectedCommunityConfig
+        local hwid = getHWID()
+        
+        task.spawn(function()
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
+                    action = "like",
+                    id = configToLike.id,
+                    hwid = hwid
+                }))
+            
+            if not response or not response.Body then
+                _0xd5fe._0x0e5f:Notify("Community", "Like failed", 3, "error")
+                return
+            end
+            
+            local success, data = pcall(function()
+                return _0xd5fe._0x740e:JSONDecode(response.Body)
+            end)
+            
+            if success and data and data.success then
+                local msg = data.liked and "Liked!" or "Unliked!"
+                _0xd5fe._0x0e5f:Notify("Community", msg .. " (" .. (data.likes or 0) .. " total)", 3, "check")
+                refreshList()
+            else
+                _0xd5fe._0x0e5f:Notify("Community", "Like failed: " .. (data and data.error or "Unknown"), 3, "error")
+            end
+        end)
+    end)
+    
+    CommunityGroup:AddButton("Delete My Config", function()
+        if not selectedUploadConfig or selectedUploadConfig == "" then
+            return _0xd5fe._0x0e5f:Notify("Community", "Select your config from the upload dropdown first", 3, "error")
+        end
+        
+        local author = game:GetService("Players").LocalPlayer.Name
+        
+        -- Find the matching cloud config by name and author
+        local matchedConfig = nil
+        for _, cfg in ipairs(communityConfigs) do
+            if cfg.name == selectedUploadConfig and cfg.author == author then
+                matchedConfig = cfg
+                break
+            end
+        end
+        
+        if not matchedConfig then
+            return _0xd5fe._0x0e5f:Notify("Community", "'" .. selectedUploadConfig .. "' is not uploaded or not yours", 3, "error")
+        end
+        
+        task.spawn(function()
+            local response, err = httpPost(apiUrl, _0xd5fe._0x740e:JSONEncode({
+                    action = "delete",
+                    id = matchedConfig.id,
+                    author = author
+                }))
+            
+            if not response or not response.Body then
+                _0xd5fe._0x0e5f:Notify("Community", "Delete failed", 3, "error")
+                return
+            end
+            
+            local success, data = pcall(function()
+                return _0xd5fe._0x740e:JSONDecode(response.Body)
+            end)
+            
+            if success and data and data.success then
+                _0xd5fe._0x0e5f:Notify("Community", "Deleted '" .. selectedUploadConfig .. "' from cloud!", 3, "check")
+                refreshList()
+            else
+                _0xd5fe._0x0e5f:Notify("Community", "Delete failed: " .. (data and data.error or "Unknown"), 3, "error")
+            end
+        end)
+    end)
+    
+    CommunityGroup:AddButton("Refresh", function()
+        refreshList()
+        if uploadDropdownRef and uploadDropdownRef.Refresh then
+            uploadDropdownRef:Refresh(self:RefreshConfigList())
+        end
+    end)
+    
+    -- Ignore community config UI elements from being saved
+    self:SetIgnoreIndexes({"CC_UploadSelect"})
+    
+    -- Auto-load on build
+    task.spawn(function()
+        task.wait(2)
+        refreshList()
+    end)
 end
 
 _0xd5fe._0x0e5f.SaveManager:BuildFolderTree()
